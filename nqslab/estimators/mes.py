@@ -17,6 +17,10 @@ from .renyi import renyi2
 
 def superposition(log_psi_1: Callable, log_psi_2: Callable, c: np.ndarray) -> Callable:
     c1, c2 = complex(c[0]), complex(c[1])
+    if c1 == 0:
+        return lambda s: np.asarray(log_psi_2(s)) + np.log(c2 + 0j)
+    if c2 == 0:
+        return lambda s: np.asarray(log_psi_1(s)) + np.log(c1 + 0j)
     def f(s):
         a = np.asarray(log_psi_1(s)) + np.log(c1 + 0j); b = np.asarray(log_psi_2(s)) + np.log(c2 + 0j)
         m = np.maximum(a.real, b.real)

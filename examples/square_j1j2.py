@@ -7,7 +7,7 @@ import numpy as np
 from nqslab.lattice import presets
 from nqslab.operator import heisenberg
 from nqslab.ed import diagonalize
-from nqslab.models import vit_for, Jastrow, ProductState, translation_group, point_group
+from nqslab.models import vit_for, Jastrow, ProductState, translation_group, point_group, marshall_sign
 from nqslab.sampler import exchange_sampler
 from nqslab.optim import MinSR
 from nqslab.vmc import VMC, VMCConfig
@@ -21,7 +21,9 @@ args = ap.parse_args()
 lat = presets.square(args.L)
 H = heisenberg(lat, 1.0) + heisenberg(lat, args.J2, "nnn")
 G = translation_group(lat, 0).times(point_group(lat, "C4", 4, 0, spin_flip=1))
-psi = ProductState(lat.N, [vit_for(lat, d=args.d, n_layers=args.layers), Jastrow(lat.disp_index, lat.n_classes)], symmetry=G)
+A = np.where(lat.site_cell.sum(axis=1) % 2 == 0)[0]          # Marshall sign of the Neel phase as the starting sign structure
+psi = ProductState(lat.N, [vit_for(lat, d=args.d, n_layers=args.layers), Jastrow(lat.disp_index, lat.n_classes),
+                           marshall_sign(A)], symmetry=G)
 cfg = VMCConfig(steps=args.steps, n_sweeps=8, thin=2, n_burn=8, lr=0.05, lr_final=0.01, diag_shift=1e-3,
                 diag_shift_final=1e-4, log_every=10, out_dir=f"runs/square_L{args.L}_J2{args.J2}")
 run = VMC(psi, H, exchange_sampler(lat, n_chains=args.chains, p_long=0.2), MinSR(lr=0.05, diag_shift=1e-3, max_step_norm=2.0), cfg)

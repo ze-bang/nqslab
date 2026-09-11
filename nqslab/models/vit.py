@@ -22,14 +22,15 @@ class FactoredAttention(nn.Module):
     d: int
     n_heads: int
     disp_index: np.ndarray            # (N, N) int, static
-    n_classes: int
+    n_classes: int = 0                # default: max(disp_index) + 1
     kernel_init_scale: float = 0.5
 
     @nn.compact
     def __call__(self, x):            # x: (B, N, d)
         B, N, d = x.shape
         H = self.n_heads; dh = d // H
-        kern = self.param("kernel", nn.initializers.normal(self.kernel_init_scale), (H, self.n_classes))
+        n_classes = self.n_classes or int(np.max(self.disp_index)) + 1
+        kern = self.param("kernel", nn.initializers.normal(self.kernel_init_scale), (H, n_classes))
         A = kern[:, jnp.asarray(self.disp_index)].astype(jnp.float32)          # (H, N, N)
         V = nn.Dense(d, use_bias=False, name="value")(x).reshape(B, N, H, dh)
         out = jnp.einsum("hij,bjhd->bihd", A, V).reshape(B, N, d)
@@ -40,7 +41,7 @@ class Block(nn.Module):
     d: int
     n_heads: int
     disp_index: np.ndarray
-    n_classes: int
+    n_classes: int = 0
     ffn_mult: int = 4
 
     @nn.compact
@@ -57,7 +58,7 @@ class Block(nn.Module):
 class FactoredViT(nn.Module):
     """log psi of shape (B,) for s of shape (B, N) in {-1, +1} and optional aux features (B, n_aux)."""
     disp_index: np.ndarray
-    n_classes: int
+    n_classes: int = 0                # default: max(disp_index) + 1
     d: int = 32
     n_layers: int = 4
     n_heads: int = 4

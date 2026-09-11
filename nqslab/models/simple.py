@@ -90,14 +90,30 @@ class MLP(nn.Module):
 
 
 class Fixed:
-    """A fixed (parameter-free) log-amplitude ``f(s, aux)`` usable as a component of a ProductState."""
+    """A fixed (parameter-free) log-amplitude usable as a component of a ProductState.
 
-    def __init__(self, fn: Callable, name: str = "fixed"):
+    ``fn(s, aux)`` receives the aux features; with ``wants_index=True`` it receives the raw aux
+    index array (B,) instead (for priors tabulated per aux point). ``fn(s)`` also works.
+    """
+
+    def __init__(self, fn: Callable, name: str = "fixed", wants_index: bool = False):
         self.fn = fn
         self.name = name
+        self.wants_index = wants_index
 
     def __call__(self, s, aux=None):
         try:
             return self.fn(s, aux)
         except TypeError:
             return self.fn(s)
+
+
+def marshall_sign(sites_A, name: str = "marshall") -> Fixed:
+    """Fixed prior (-1)^{N_up on sublattice A} = exp(i pi sum_{j in A} (1 + s_j)/2): the Marshall sign rule of
+    bipartite antiferromagnets. Starting a real-amplitude ansatz from this sign structure avoids the
+    sign-learning plateau of positive initialisations (e.g. an RBM under a translation projection)."""
+    A = jnp.asarray(np.asarray(sites_A, dtype=int))
+    def f(s, aux=None):
+        n_A = jnp.sum(0.5 * (1 + s[:, A].astype(jnp.float64)), axis=1)
+        return 1j * jnp.pi * n_A
+    return Fixed(f, name=name)

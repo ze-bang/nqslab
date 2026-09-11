@@ -8,12 +8,17 @@ from nqslab.ed import sz_basis
 
 
 def _check_projection(st, params, basis, G):
+    """psi_G(g^-1 s) = chi(g) psi_G(s) for every g, with an absolute tolerance set by the unprojected
+    amplitudes over the orbit (an irrep may annihilate a configuration, where ratios are meaningless)."""
     s = jnp.asarray(basis[:6])
-    lp = st.log_psi(params, s, 0)
+    st0 = ProductState(st.N, st.components)                      # same parameters, no projection
+    orbit = G.apply_all(s).reshape(G.order * s.shape[0], st.N)
+    scale = np.exp(np.asarray(st0.log_psi(params, orbit, 0)).real.reshape(G.order, -1).max(axis=0))
+    psi = np.exp(np.asarray(st.log_psi(params, s, 0)))
     for g in range(G.order):
         sg = s[:, G.perms[g]] * G.flips[g]
-        diff = st.log_psi(params, sg, 0) - lp - np.log(G.chars[g])
-        assert np.allclose(np.exp(np.asarray(diff)), 1.0, atol=1e-8)
+        psi_g = np.exp(np.asarray(st.log_psi(params, sg, 0)))
+        assert np.all(np.abs(psi_g - G.chars[g] * psi) < 1e-9 * scale), g
 
 
 def test_vit_is_translation_invariant_on_multi_sublattice_lattice():
@@ -31,8 +36,11 @@ def test_vit_is_translation_invariant_on_multi_sublattice_lattice():
 def test_projection_momentum_point_group_and_flip():
     lat = presets.square(3)
     basis, _ = sz_basis(lat.N, 4)
-    G = translation_group(lat, 2).times(point_group(lat, "C4", 4, 1, spin_flip=-1))
+    G = translation_group(lat, 0).times(point_group(lat, "C4", 4, 1, spin_flip=-1))
     assert G.check_group() and G.order == 9 * 4 * 2
+    import pytest
+    with pytest.raises(ValueError):          # a nonzero momentum is not C4 invariant on this torus: no 1D irrep
+        translation_group(lat, 2).times(point_group(lat, "C4", 4, 0))
     st = ProductState(lat.N, [RBM(alpha=1, scale=0.2), Jastrow(disp_index=lat.disp_index, n_classes=lat.n_classes)],
                       symmetry=G)
     _check_projection(st, st.init(jax.random.PRNGKey(0)), basis, G)

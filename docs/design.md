@@ -39,6 +39,17 @@ order as `cost` so the local estimator sizes its batches in network evaluations.
 (2 Ns x 2 Ns) system and is exact when P > 2 Ns; `ChunkedMinSR` keeps the Jacobian in host memory
 in sample chunks when 2 Ns x P does not fit on the device.
 
+## Sign structure and projections (a measured trap)
+
+On the 8-site Heisenberg chain an RBM x Jastrow started from near-positive amplitudes reaches the
+exact ground state (-3.6511) without projection, but plateaus at -2.99 under *any* symmetry
+projection (translations alone, the spin flip alone, or both), for minSR and SR alike, at every
+learning rate tried. The Marshall-rotated Hamiltonian (positive ground state), an MLP with a phase
+head, or the RBM times the fixed `marshall_sign` prior all converge to -3.6511 under the same
+projection. Rule of thumb: give a projected real-amplitude ansatz the sign structure of the target
+(Marshall sign, an analytic prior) or a phase head; do not expect the projected sum of positive
+amplitudes to find it.
+
 ## What is deliberately not here (yet)
 
 Local dimensions other than 2 (spin-S, bosons), fermions (Slater/backflow determinants and

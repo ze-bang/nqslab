@@ -123,15 +123,13 @@ def compile_operator(op: Operator, tol: float = 1e-14) -> ConnectionRule:
     rows = []
     for key, coeff in canon.items():
         sites = []; tables = []; flip = []
-        for site, tag in key:
-            kind = tag[0]; payload = tag[2:]
-            if kind == "d":
-                a_up, a_dn = (complex(x) for x in payload.split(","))
-                tables.append([a_dn, a_up])              # index 0 <-> s_i = -1 (down), 1 <-> +1 (up)
+        for site, kind in key:
+            if kind == "z":
+                tables.append([-0.5, 0.5])               # index 0 <-> s_i = -1 (down), 1 <-> +1 (up)
             elif kind == "p":                            # raise: input must be down
-                tables.append([complex(payload), 0.0]); flip.append(site)
+                tables.append([1.0, 0.0]); flip.append(site)
             else:                                        # lower: input must be up
-                tables.append([0.0, complex(payload)]); flip.append(site)
+                tables.append([0.0, 1.0]); flip.append(site)
             sites.append(site)
         flip = tuple(sorted(flip))
         if flip:
@@ -149,8 +147,9 @@ def compile_operator(op: Operator, tol: float = 1e-14) -> ConnectionRule:
     t_coeff = np.zeros(n_terms, dtype=complex)
     t_group = np.full(n_terms, n_groups, dtype=np.int32)
     for a, (sites, tables, coeff, g) in enumerate(rows):
-        t_sites[a, : len(sites)] = sites
-        t_table[a, : len(sites)] = tables
+        if sites:
+            t_sites[a, : len(sites)] = sites
+            t_table[a, : len(sites)] = tables
         t_coeff[a] = coeff
         t_group[a] = n_groups if g < 0 else g
     g_sign = np.ones((n_groups, op.N), dtype=np.int8)

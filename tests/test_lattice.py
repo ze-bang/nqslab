@@ -81,11 +81,15 @@ def test_triangles_triangular():
         assert d1[0] * d2[1] - d1[1] * d2[0] > 0
 
 
+def _unoriented(types):
+    return {frozenset(((mu, R), (nu, tuple(-x for x in R)))) for mu, nu, R in types}
+
+
 def test_neighbor_shells_match_presets():
     lat = presets.square(4)
     shells = lat.neighbor_shells(2)
-    assert sorted(shells[0]) == sorted(lat.bond_types["nn"])
-    assert sorted(shells[1]) == sorted(lat.bond_types["nnn"])
+    assert _unoriented(shells[0]) == _unoriented(lat.bond_types["nn"])
+    assert _unoriented(shells[1]) == _unoriented(lat.bond_types["nnn"])
 
 
 def test_distance_and_momenta():

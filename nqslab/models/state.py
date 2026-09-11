@@ -73,7 +73,7 @@ class ProductState:
         lp = jnp.zeros(G * B, dtype=jnp.complex128)
         for name, c in zip(self.names, self.components):
             if isinstance(c, Fixed):
-                lp = lp + c(sg, aux)
+                lp = lp + c(sg, kg if c.wants_index else aux)
             else:
                 lp = lp + c.apply(params[name], sg, aux)
         if G == 1:

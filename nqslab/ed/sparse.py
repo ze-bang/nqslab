@@ -58,7 +58,7 @@ def dense_state_vector(log_psi: Callable[[np.ndarray], np.ndarray], basis: np.nd
     """Normalised vector of a wavefunction given as log psi on the basis."""
     out = np.empty(len(basis), dtype=complex)
     for start in range(0, len(basis), chunk):
-        out[start:start + chunk] = log_psi(basis[start:start + chunk])
+        out[start:start + chunk] = log_psi(basis[start:start + chunk].astype(int))
     out = np.exp(out - np.max(out.real))
     return out / np.linalg.norm(out)
 

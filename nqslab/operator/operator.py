@@ -118,47 +118,26 @@ class Operator:
 
     # ------------------------------------------------------------------ canonical form
     def canonical(self, tol: float = 1e-14) -> Dict[Tuple[Tuple[int, str], ...], complex]:
-        """Merge terms into a dictionary keyed by the ordered tuple of (site, single-entry factor).
+        """Unique canonical form: a dictionary {((site, kind), ...): coeff} over products of ``sz`` ('z'),
+        ``sp`` ('p') and ``sm`` ('m') on distinct sites, sorted by site.
 
         Every factor is expanded into sp/sm/sz, the product on each site is reduced to one 2x2
-        matrix, and each such matrix is either diagonal (``'d:<a_up>,<a_dn>'``), raising, lowering
-        or zero. Two operators are equal iff their canonical dictionaries agree.
+        matrix, and a diagonal matrix diag(a_up, a_dn) is split into (a_up + a_dn)/2 id + (a_up - a_dn) sz.
+        Two operators are equal iff their canonical dictionaries agree; the connection-rule compiler
+        and the QED adapter work from this form.
         """
         out: Dict[Tuple[Tuple[int, str], ...], complex] = defaultdict(complex)
         for t in self.terms:
             for coeff, ops in _expand(t):
-                key, c = _canonical_term(ops, t.sites, coeff)
-                if key is not None:
+                for key, c in _canonical_term(ops, t.sites, coeff):
                     out[key] += c
         return {k: v for k, v in out.items() if abs(v) > tol}
 
     def simplify(self, tol: float = 1e-14) -> "Operator":
-        """Equivalent operator with merged terms, one product of sp/sm/sz per canonical key.
-
-        A general diagonal factor diag(a_up, a_dn) is split as (a_up + a_dn)/2 id + (a_up - a_dn) sz.
-        """
-        terms = []
-        for key, c in self.canonical(tol).items():
-            partial = [(c, [], [])]                              # (coeff, ops, sites)
-            for site, tag in key:
-                if tag.startswith("d:"):
-                    a_up, a_dn = (complex(x) for x in tag[2:].split(","))
-                    s0 = 0.5 * (a_up + a_dn); s1 = a_up - a_dn
-                    nxt = []
-                    for cc, ops, sites in partial:
-                        if abs(s0) > tol:
-                            nxt.append((cc * s0, list(ops), list(sites)))
-                        if abs(s1) > tol:
-                            nxt.append((cc * s1, ops + ["sz"], sites + [site]))
-                    partial = nxt
-                else:
-                    op = "sp" if tag.startswith("p:") else "sm"
-                    a = complex(tag[2:])
-                    partial = [(cc * a, ops + [op], sites + [site]) for cc, ops, sites in partial]
-            for cc, ops, sites in partial:
-                if abs(cc) > tol:
-                    terms.append(Term(tuple(ops), tuple(sites), cc))
-        return Operator(self.N, terms)
+        """Equivalent operator with one term per canonical key (products of sz, sp, sm on distinct sites)."""
+        kind = {"z": "sz", "p": "sp", "m": "sm"}
+        return Operator(self.N, [Term(tuple(kind[k] for _, k in key), tuple(site for site, _ in key), c)
+                                 for key, c in self.canonical(tol).items()])
 
     def is_hermitian(self, tol: float = 1e-10) -> bool:
         a = self.canonical(tol); b = self.dagger().canonical(tol)
@@ -218,39 +197,37 @@ def _expand(t: Term):
         yield c, tuple(ops)
 
 
-def _fmt(x: complex) -> str:
-    return f"{x.real:.12g}{x.imag:+.12g}j"
-
-
 def _canonical_term(ops: Tuple[str, ...], sites: Tuple[int, ...], coeff: complex):
-    """Reduce a product of sp/sm/sz/id factors to (key, coeff). key = sorted tuple of (site, tag)."""
+    """Reduce a product of sp/sm/sz/id factors to a list of (key, coeff): key = ((site, kind), ...)."""
     per_site: Dict[int, np.ndarray] = {}
-    order: List[int] = []
     for o, s in zip(ops, sites):
         if o == "id":
             continue
         if s not in per_site:
-            per_site[s] = np.eye(2, dtype=complex); order.append(s)
+            per_site[s] = np.eye(2, dtype=complex)
         per_site[s] = per_site[s] @ _M[o]          # leftmost factor is applied last: M = M_left @ ... @ M_right
-    key = []
+    partial = [(complex(coeff), [])]               # (coeff, [(site, kind)])
     for s in sorted(per_site):
         m = per_site[s]
         offd = abs(m[0, 1]) + abs(m[1, 0]); diag = abs(m[0, 0]) + abs(m[1, 1])
         if offd < 1e-15 and diag < 1e-15:
-            return None, 0.0
+            return []
         if offd < 1e-15:
-            if abs(m[0, 0] - 1) < 1e-15 and abs(m[1, 1] - 1) < 1e-15:
-                continue                             # identity factor
-            key.append((s, f"d:{_fmt(m[0, 0])},{_fmt(m[1, 1])}"))
+            s0 = 0.5 * (m[0, 0] + m[1, 1]); s1 = m[0, 0] - m[1, 1]        # diag = s0 id + s1 sz
+            nxt = []
+            for c, key in partial:
+                if abs(s0) > 1e-15:
+                    nxt.append((c * s0, key))
+                if abs(s1) > 1e-15:
+                    nxt.append((c * s1, key + [(s, "z")]))
+            partial = nxt
         else:
             assert diag < 1e-15, "a product of single-entry matrices cannot mix diagonal and off-diagonal"
-            if abs(m[0, 1]) > 1e-15 and abs(m[1, 0]) > 1e-15:
-                raise AssertionError("unexpected two-entry off-diagonal factor")
             if abs(m[0, 1]) > 1e-15:
-                key.append((s, f"p:{_fmt(m[0, 1])}"))   # raises: nonzero only for input down
+                partial = [(c * m[0, 1], key + [(s, "p")]) for c, key in partial]     # raises: input down
             else:
-                key.append((s, f"m:{_fmt(m[1, 0])}"))   # lowers: nonzero only for input up
-    return tuple(key), complex(coeff)
+                partial = [(c * m[1, 0], key + [(s, "m")]) for c, key in partial]     # lowers: input up
+    return [(tuple(key), c) for c, key in partial]
 
 
 # ---------------------------------------------------------------------- builders

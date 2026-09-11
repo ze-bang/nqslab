@@ -26,10 +26,11 @@ def full_basis(N: int) -> Tuple[np.ndarray, np.ndarray]:
 def sz_basis(N: int, n_up: Optional[int] = None) -> Tuple[np.ndarray, np.ndarray]:
     """All configurations with n_up up spins (default N // 2) and their codes, sorted by code."""
     n_up = N // 2 if n_up is None else n_up
-    combs = np.array(list(combinations(range(N), n_up)), dtype=int).reshape(-1, n_up)
+    combs = list(combinations(range(N), n_up))
     basis = -np.ones((len(combs), N), dtype=np.int8)
-    rows = np.repeat(np.arange(len(combs)), n_up)
-    basis[rows, combs.ravel()] = 1
+    if n_up > 0:
+        combs = np.array(combs, dtype=int).reshape(len(combs), n_up)
+        basis[np.repeat(np.arange(len(combs)), n_up), combs.ravel()] = 1
     codes = codes_of(basis)
     order = np.argsort(codes)
     return basis[order], codes[order]
