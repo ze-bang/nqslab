@@ -48,3 +48,29 @@ def test_mixed_move():
     smp = MetropolisSampler(N, move, n_chains=50)
     S, _, acc = smp.make_sampler(st.log_psi, 0)(p, smp.init_state(jax.random.PRNGKey(0), n_up=3), jax.random.PRNGKey(1), 10, 1, 2)
     assert np.asarray(S).shape == (500, N) and float(acc) > 0
+
+
+def test_cluster_flip_move_preserves_a_constraint():
+    """Flipping whole stars of a toric code keeps every plaquette satisfied, which single flips cannot."""
+    from nqslab.sampler import ClusterFlipMove, MetropolisSampler
+    from nqslab.lattice import Lattice
+    lat = Lattice(np.eye(2), [[0.5, 0.0], [0.0, 0.5]], 3, name="square-links")
+    stars, plaqs = [], []
+    for cell in lat.cells:
+        cell = np.asarray(cell)
+        stars.append([lat.index_of(cell, 0)[0], lat.index_of(cell, 1)[0],
+                      lat.index_of(cell - [1, 0], 0)[0], lat.index_of(cell - [0, 1], 1)[0]])
+        plaqs.append([lat.index_of(cell, 0)[0], lat.index_of(cell, 1)[0],
+                      lat.index_of(cell + [0, 1], 0)[0], lat.index_of(cell + [1, 0], 1)[0]])
+    stars = np.array(stars); plaqs = np.array(plaqs)
+    N = lat.N
+    st = ProductState(N, [RBM(alpha=1, scale=0.02)])            # nearly flat, so moves are accepted
+    p = st.init(jax.random.PRNGKey(0))
+    smp = MetropolisSampler(N, ClusterFlipMove(stars), n_chains=16)
+    s0 = jnp.ones((16, N), dtype=jnp.int8)                       # all up: every plaquette is +1
+    assert np.all(np.prod(np.asarray(s0)[:, plaqs], axis=2) == 1)
+    S, _, acc = smp.make_sampler(st.log_psi, 0)(p, s0, jax.random.PRNGKey(0), 20, 1, 5)
+    S = np.asarray(S)
+    assert np.all(np.prod(S[:, plaqs], axis=2) == 1)             # the constraint survives every move
+    assert float(acc) > 0.5                                      # and a flat state accepts almost everything
+    assert len(np.unique(S, axis=0)) > 32                        # so the chain explores the sector

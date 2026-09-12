@@ -72,6 +72,33 @@ class FlipMove(Move):
 
 
 @dataclass
+class ClusterFlipMove(Move):
+    """Flip every spin of one randomly chosen cluster.
+
+    Given as a list of site sets, this is the move that keeps a hard constraint satisfied when a
+    single flip or exchange cannot: the star operators of a toric code, a loop of an ice model, or
+    any other set whose flip preserves the constraint. The proposal is symmetric because a cluster
+    is its own inverse, so the acceptance rule is unchanged.
+    """
+    clusters: np.ndarray                    # (n_clusters, cluster_size) site indices
+
+    def __post_init__(self):
+        self._c = jnp.asarray(np.asarray(self.clusters, dtype=int).reshape(len(self.clusters), -1))
+
+    @property
+    def conserves_sz(self) -> bool:
+        return False                        # a cluster of even size conserves it only for balanced flips
+
+    def propose(self, s, key):
+        C = s.shape[0]
+        a = jax.random.randint(key, (C,), 0, self._c.shape[0])
+        sites = self._c[a]                                          # (C, k)
+        rows = jnp.repeat(jnp.arange(C), sites.shape[1])
+        sp = s.at[rows, sites.reshape(-1)].multiply(-1)
+        return sp, jnp.ones(C, dtype=bool)
+
+
+@dataclass
 class MixedMove(Move):
     moves: Sequence[Move]
     probs: Sequence[float]
