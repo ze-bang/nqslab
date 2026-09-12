@@ -66,3 +66,35 @@ def test_fixed_component_and_aux_grid():
     s = jnp.asarray(sz_basis(N)[0][:3])
     a = st.log_psi(p, s, 0); b = st.log_psi(p, s, 1); c = st.log_psi(p, s, jnp.array([0, 1, 0]))
     assert not np.allclose(a, b) and np.allclose(np.asarray(c)[[0, 2]], np.asarray(a)[[0, 2]]) and np.isclose(np.asarray(c)[1], np.asarray(b)[1])
+
+
+def test_loop_feature_is_exactly_the_loop_parities():
+    """Each loop contributes c_k times the product of its spins, with unequal lengths handled."""
+    import numpy as np
+    import jax
+    import jax.numpy as jnp
+    from nqslab.models import LoopFeature
+
+    loops = ((0, 1, 2, 3), (1, 4), (0, 2, 4))
+    m = LoopFeature(loops=loops, scale=0.4)
+    rng = np.random.default_rng(0)
+    s = jnp.asarray(rng.choice([-1, 1], size=(16, 5)).astype(np.int8))
+    v = m.init(jax.random.PRNGKey(1), s)
+    c = np.asarray(v["params"]["c_re"] + 1j * v["params"]["c_im"])
+    w = np.stack([np.prod(np.asarray(s)[:, list(l)], axis=1) for l in loops], axis=1)
+    assert np.allclose(np.asarray(m.apply(v, s)), w @ c)
+    # the score function of c_k is the loop itself, which is what makes the direction representable
+    g = jax.jacrev(lambda p: m.apply(p, s).real)(v)["params"]["c_re"]
+    assert np.allclose(np.asarray(g), w)
+
+
+def test_loop_feature_with_no_loops_is_inert():
+    import jax
+    import jax.numpy as jnp
+    import numpy as np
+    from nqslab.models import LoopFeature
+
+    m = LoopFeature(loops=())
+    s = jnp.asarray(np.ones((4, 6), dtype=np.int8))
+    v = m.init(jax.random.PRNGKey(0), s)
+    assert np.allclose(np.asarray(m.apply(v, s)), 0.0)

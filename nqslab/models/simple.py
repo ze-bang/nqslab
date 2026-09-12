@@ -74,6 +74,31 @@ class Jastrow(nn.Module):
         return out
 
 
+class LoopFeature(nn.Module):
+    """log psi += sum_k c_k prod_{i in loops[k]} s_i: explicit Wilson-loop (parity) features.
+
+    A network reading local variables can only build a parity of degree d out of products of many
+    weights, so its weight in the tangent space falls off with d. Any parity the physics needs and
+    the encoding hides -- a winding loop labelling a topological sector, a long anyon string -- can
+    instead be handed over directly. Each loop costs one complex parameter and contributes a score
+    function equal to the loop itself, so that direction is represented exactly rather than learned.
+    """
+    loops: tuple = ()
+    scale: float = 0.0
+
+    @nn.compact
+    def __call__(self, s, aux=None):
+        if not self.loops:
+            return jnp.zeros(s.shape[0], dtype=jnp.complex128)
+        n = max(len(l) for l in self.loops)
+        idx = jnp.asarray([list(l) + [0] * (n - len(l)) for l in self.loops])
+        keep = jnp.asarray([[k < len(l) for k in range(n)] for l in self.loops])
+        f = jnp.where(keep[None], s.astype(jnp.float64)[:, idx], 1.0)  # pad slots act as +1
+        w = jnp.prod(f, axis=2)                                        # (B, n_loops)
+        c = _complex_param(self, "c", (len(self.loops),), self.scale)
+        return w @ c
+
+
 class MLP(nn.Module):
     """Fully connected network s -> (log|psi|, arg psi); optionally symmetric under a permutation set."""
     widths: tuple = (64, 64)
