@@ -51,3 +51,18 @@ def test_berry_phase_sampled_matches_exact():
     F_ex = exact.plaquette_berry_phase_exact(states)
     F, _ = plaquette_berry_phase(fns, samples)
     assert abs(np.angle(np.exp(1j * (F - F_ex)))) < 0.1
+
+
+def test_chern_from_corners_normalisation():
+    """C = 2 pi F / delta^2: a uniform curvature giving C = 1 puts F = delta^2 / (2 pi) on one plaquette."""
+    from nqslab.estimators.chern import chern_from_corners
+    rng = np.random.default_rng(0)
+    configs = np.arange(3)[:, None]                              # three configurations, each state has |psi| = 1
+    phases = rng.uniform(0, 2 * np.pi, (4, 3))
+    corners = [[(lambda ph: (lambda s: 1j * ph[np.asarray(s)[:, 0]]))(phases[k])] for k in range(4)]
+    samples = [[configs] for _ in range(4)]                      # uniform |psi|^2: all configurations, exact averages
+    v = np.exp(1j * phases)
+    F_exact = np.angle(np.prod([np.vdot(v[k], v[(k + 1) % 4]) for k in range(4)]))
+    C, F = chern_from_corners(corners, samples, delta=np.pi / 2)
+    assert abs(F - F_exact) < 1e-12
+    assert abs(C - 2 * np.pi * F_exact / (np.pi / 2) ** 2) < 1e-12

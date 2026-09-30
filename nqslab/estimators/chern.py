@@ -32,6 +32,11 @@ def plaquette_berry_phase(corners: Sequence[Sequence[Callable]], samples: Sequen
 
 
 def chern_from_corners(corners, samples, delta: float) -> Tuple[float, float]:
-    """Single-plaquette Chern estimate C ~ F / delta^2 (the plaquette covers (delta/2pi)^2 of the twist torus)."""
+    """Single-plaquette Chern estimate C ~ 2 pi F / delta^2, and F.
+
+    C = (1/2pi) * (total Berry flux through the twist torus [0, 2pi)^2). If the curvature is uniform, the
+    plaquette of side delta carries the fraction (delta/2pi)^2 of the flux, F = 2pi C (delta/2pi)^2, hence
+    C = 2pi F / delta^2. (Before 2026-09-30 this returned F / delta^2 = C / 2pi.)
+    """
     F, _ = plaquette_berry_phase(corners, samples)
-    return F / delta ** 2, F
+    return 2 * np.pi * F / delta ** 2, F
